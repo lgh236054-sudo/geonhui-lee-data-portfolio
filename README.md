@@ -3,7 +3,7 @@
 This repository contains **code only** for two small projects.
 
 For the narrative write-up, figures, and interpretation, see my Notion portfolio page:
-- Notion: <ADD YOUR NOTION LINK HERE>
+- Notion: https://bit.ly/GeonhuiLee_DataPortfolio
 
 ## Projects
 - **Project 01 — A/B Test Basics (assignment vs treatment)**  
