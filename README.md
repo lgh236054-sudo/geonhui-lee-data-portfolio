@@ -1,4 +1,4 @@
-# Data Analytics Portfolio — Code (Minimal)
+# Data Analytics Portfolio — Code
 
 This repository contains **code only** for two small projects.
 
