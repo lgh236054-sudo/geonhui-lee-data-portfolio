@@ -1,13 +1,4 @@
-"""Reproduce key figures for the public-data EDA project.
-
-This repository is intentionally **code-only** (no CSV committed). To run the analysis:
-1) Download the dataset from data.go.kr (see the project README)
-2) Save a Seoul-only extract (or your own subset) as:
-   projects/02_fire_rescue_public_data/data/fire_rescue_seoul_2021.csv
-
-Usage:
-    python src/run_analysis.py
-"""
+"""Run Project 02 and save figures."""
 
 from __future__ import annotations
 
@@ -29,15 +20,8 @@ def main() -> None:
     data_path = project_root / "data" / "fire_rescue_seoul_2021.csv"
     out_dir = project_root / "reports" / "figures"
     out_dir.mkdir(parents=True, exist_ok=True)
-
     if not data_path.exists():
-        print("\n[Data missing] This is a code-only repository.")
-        print("To run Project 02 locally:")
-        print("  1) Download the National Fire Agency rescue activity dataset from data.go.kr")
-        print("  2) Create a Seoul subset and save it as:")
-        print(f"     {data_path}")
-        print("  3) Re-run: python projects/02_fire_rescue_public_data/src/run_analysis.py\n")
-        return
+        raise FileNotFoundError(f"Missing data file: {data_path}")
 
     df = load_seoul_data(data_path)
     df = add_time_features(df)

@@ -1,13 +1,4 @@
-"""Run a simple beginner-friendly A/B test analysis.
-
-This project is "code-only" on GitHub (no CSV committed). To keep the script runnable,
-it will generate a small synthetic dataset if the CSV is missing.
-
-What this script demonstrates:
-- assignment vs treatment receipt (drop-off / noncompliance)
-- missing outcomes (attrition) and why ITT-style comparisons matter
-- basic pandas groupby summaries and simple matplotlib charts
-"""
+"""Run A/B test summaries."""
 
 from __future__ import annotations
 
@@ -19,22 +10,12 @@ import matplotlib.pyplot as plt
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-DATA_PATH = PROJECT_DIR / "data" / "synthetic_ab_test_beginner.csv"
+DATA_PATH = PROJECT_DIR / "data" / "synthetic_ab_test.csv"
 FIG_DIR = PROJECT_DIR / "reports" / "figures"
 
 
 def generate_synthetic_ab_data(n: int = 800, seed: int = 42) -> pd.DataFrame:
-    """Generate a small synthetic A/B test dataset.
-
-    Columns:
-    - assigned_group: A or B (random assignment)
-    - participated: 1 if participated, 0 otherwise (drop-off after assignment)
-    - received_treatment: 1 if treatment received, 0 otherwise (noncompliance)
-    - purchase: 1/0 purchase outcome, with some missing values (attrition)
-
-    Notes:
-    - This is NOT intended to be a realistic causal model; it is a teaching example.
-    """
+    """Generate a synthetic A/B test dataset."""
     rng = np.random.default_rng(seed)
 
     assigned = rng.choice(["A", "B"], size=n, p=[0.5, 0.5])
@@ -78,15 +59,10 @@ def main() -> None:
 
     if DATA_PATH.exists():
         df = pd.read_csv(DATA_PATH)
-        data_note = f"Loaded CSV: {DATA_PATH}"
+        print(f"Loaded CSV: {DATA_PATH}")
     else:
         df = generate_synthetic_ab_data()
-        data_note = (
-            "CSV not found (code-only repo). Generated a synthetic dataset in-memory. "
-            "(You may save it locally if you want.)"
-        )
-
-    print(data_note)
+        print("Generated synthetic data (CSV not found).")
     print(f"Rows: {len(df):,}")
     print(df.head(3))
 
