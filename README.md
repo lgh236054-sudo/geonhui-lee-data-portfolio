@@ -1,7 +1,7 @@
 # Data Analytics Portfolio — Code
 
 Full write-ups (figures + interpretation):
-- Notion: https://thirsty-shock-b82.notion.site/Data-Analytics-Portfolio-2b27ba629e1080d1aaf7f29abda0821f
+- Notion: https://bit.ly/GeonhuiLee_DataPortfolio
 
 ## Projects
 - Project 01: A/B Test (assignment vs treatment; noncompliance)
