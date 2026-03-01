@@ -7,7 +7,7 @@ This repository contains the code, data generation pipelines, and analytical not
   * `path: projects/01_ab_test_basics/`
   * **Key methods:** Synthetic data generation, Intention-to-Treat (ITT) vs. As-Treated analysis, selection bias evaluation.
 # Data Analytics Portfolio — Code
-* **Project 02: Seoul 119 Rescue Activity (Public Data EDA)
+* Project 02: Seoul 119 Rescue Activity (Public Data EDA)
   * `path: projects/02_fire_rescue_public_data/`
 
 Full write-ups (figures + interpretation):
