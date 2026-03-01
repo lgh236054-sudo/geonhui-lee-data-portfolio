@@ -1,4 +1,4 @@
-"""Run A/B test summaries."""
+"""Run A/B test summaries and generate advanced plots with error bars."""
 
 from __future__ import annotations
 
@@ -87,30 +87,78 @@ def main() -> None:
     print("\nAs-treated purchase rate (0=did not receive, 1=received):")
     print(as_treated_rate)
 
-    # Figures (saved locally; .gitignore prevents committing images)
-    plt.figure()
-    participation_rate.plot(kind="bar")
-    plt.ylim(0, 1)
-    plt.ylabel("Participation rate")
-    plt.title("Participation rate by assigned group")
+    # ==========================================
+    # Figures (Advanced plotting with error bars)
+    # ==========================================
+    
+    # 1. Participation Balance Check Figure
+    part_stats = df.groupby('assigned_group')['participated'].agg(['mean', 'count'])
+    part_stats['se'] = np.sqrt(part_stats['mean'] * (1 - part_stats['mean']) / part_stats['count'])
+    part_stats['ci95'] = 1.96 * part_stats['se']
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    bars = ax.bar(part_stats.index, part_stats['mean'], 
+                  yerr=part_stats['ci95'], capsize=5, color='#1f77b4', edgecolor='black', alpha=0.9)
+    ax.set_ylim(0, 1.0)
+    ax.set_ylabel("Participation Rate")
+    ax.set_title("Participation Balance Check")
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['Control (A)', 'Reserved Stock Prompt (B)'])
+
+    for i, bar in enumerate(bars):
+        yval = bar.get_height()
+        n_val = part_stats['count'].iloc[i]
+        ax.text(bar.get_x() + bar.get_width()/2, yval + 0.02, 
+                f"{yval:.3f}\n(n={n_val})", ha='center', va='bottom', fontsize=10)
+
     plt.tight_layout()
     plt.savefig(FIG_DIR / "participation_rate_by_assignment.png", dpi=200)
     plt.close()
 
-    plt.figure()
-    itt_rate.plot(kind="bar")
-    plt.ylim(0, max(0.1, float(itt_rate.max()) * 1.5))
-    plt.ylabel("Observed purchase rate")
-    plt.title("ITT: Purchase rate by assigned group (observed outcomes only)")
+    # 2. ITT (Intention-to-Treat) Figure
+    itt_stats = df_obs.groupby('assigned_group')['purchase'].agg(['mean', 'count'])
+    itt_stats['se'] = np.sqrt(itt_stats['mean'] * (1 - itt_stats['mean']) / itt_stats['count'])
+    itt_stats['ci95'] = 1.96 * itt_stats['se']
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    bars = ax.bar(itt_stats.index, itt_stats['mean'], 
+                  yerr=itt_stats['ci95'], capsize=5, color='#1f77b4', edgecolor='black', alpha=0.9)
+    ax.set_ylim(0, max(0.12, float(itt_stats['mean'].max()) * 1.5))
+    ax.set_ylabel("Observed Purchase Rate")
+    ax.set_title("ITT: Purchase rate by assigned group (observed outcomes)")
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['Control (A)', 'Reserved Stock Prompt (B)'])
+
+    for i, bar in enumerate(bars):
+        yval = bar.get_height()
+        n_val = itt_stats['count'].iloc[i]
+        ax.text(bar.get_x() + bar.get_width()/2, yval + 0.005, 
+                f"{yval:.3f}\n(n={n_val})", ha='center', va='bottom', fontsize=10)
+
     plt.tight_layout()
     plt.savefig(FIG_DIR / "itt_purchase_rate_by_assignment.png", dpi=200)
     plt.close()
 
-    plt.figure()
-    as_treated_rate.plot(kind="bar")
-    plt.ylim(0, max(0.1, float(as_treated_rate.max()) * 1.5))
-    plt.ylabel("Observed purchase rate")
-    plt.title("As-treated: Purchase rate by treatment received")
+    # 3. As-Treated Figure
+    as_treated_stats = df_obs.groupby('received_treatment')['purchase'].agg(['mean', 'count'])
+    as_treated_stats['se'] = np.sqrt(as_treated_stats['mean'] * (1 - as_treated_stats['mean']) / as_treated_stats['count'])
+    as_treated_stats['ci95'] = 1.96 * as_treated_stats['se']
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    bars = ax.bar(as_treated_stats.index, as_treated_stats['mean'], 
+                  yerr=as_treated_stats['ci95'], capsize=5, color='#1f77b4', edgecolor='black', alpha=0.9)
+    ax.set_ylim(0, max(0.12, float(as_treated_stats['mean'].max()) * 1.5))
+    ax.set_ylabel("Observed Purchase Rate")
+    ax.set_title("As-Treated: Purchase rate by treatment received")
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['Not Treated\n(Did not open)', 'Treated\n(Opened Email)'])
+
+    for i, bar in enumerate(bars):
+        yval = bar.get_height()
+        n_val = as_treated_stats['count'].iloc[i]
+        ax.text(bar.get_x() + bar.get_width()/2, yval + 0.005, 
+                f"{yval:.3f}\n(n={n_val})", ha='center', va='bottom', fontsize=10)
+
     plt.tight_layout()
     plt.savefig(FIG_DIR / "purchase_rate_by_treatment_received.png", dpi=200)
     plt.close()
