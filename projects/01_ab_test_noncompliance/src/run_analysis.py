@@ -1,170 +1,151 @@
-"""Run A/B test summaries and generate advanced plots with error bars."""
-
-from __future__ import annotations
-
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
+# Set paths (Beginner friendly way)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_PATH = os.path.join(BASE_DIR, "data", "synthetic_ab_test.csv")
+FIG_DIR = os.path.join(BASE_DIR, "reports", "figures")
 
-PROJECT_DIR = Path(__file__).resolve().parents[1]
-DATA_PATH = PROJECT_DIR / "data" / "synthetic_ab_test.csv"
-FIG_DIR = PROJECT_DIR / "reports" / "figures"
-
-
-def generate_synthetic_ab_data(n: int = 800, seed: int = 42) -> pd.DataFrame:
-    """Generate a synthetic A/B test dataset."""
-    rng = np.random.default_rng(seed)
-
-    assigned = rng.choice(["A", "B"], size=n, p=[0.5, 0.5])
-
-    # Drop-off differs slightly by assignment (e.g., message/channel differences)
-    p_participate = np.where(assigned == "A", 0.72, 0.68)
-    participated = rng.binomial(1, p_participate)
-
-    # Noncompliance: not everyone assigned to B actually receives treatment;
-    # some assigned to A may still receive it (spillover/mis-targeting).
-    received_treatment = np.zeros(n, dtype=int)
-    received_treatment[assigned == "B"] = rng.binomial(1, 0.85, size=(assigned == "B").sum())
-    received_treatment[assigned == "A"] = rng.binomial(1, 0.05, size=(assigned == "A").sum())
-
-    # Outcome model (simple): baseline + uplift if received treatment.
-    # People who didn't participate have outcomes that are more likely to be missing.
-    base_rate = 0.06
-    uplift = 0.015
-    purchase_prob = base_rate + uplift * received_treatment
-    purchase = rng.binomial(1, np.clip(purchase_prob, 0, 1)).astype(float)
-
-    # Attrition / missing outcomes: higher missingness among non-participants
-    p_missing = np.where(participated == 1, 0.05, 0.25)
-    missing = rng.binomial(1, p_missing).astype(bool)
-    purchase[missing] = np.nan
-
-    df = pd.DataFrame(
-        {
-            "user_id": np.arange(1, n + 1),
-            "assigned_group": assigned,
-            "participated": participated,
-            "received_treatment": received_treatment,
-            "purchase": purchase,
-        }
-    )
+def generate_data():
+    # Set seed
+    np.random.seed(42)
+    n = 800
+    
+    # 1. Assign groups randomly
+    assigned_group = np.random.choice(["A", "B"], size=n)
+    
+    # 2. Participation (Drop-off)
+    participated = []
+    for group in assigned_group:
+        if group == "A":
+            participated.append(np.random.binomial(1, 0.72))
+        else:
+            participated.append(np.random.binomial(1, 0.68))
+            
+    # 3. Treatment received (Noncompliance)
+    received_treatment = []
+    for i in range(n):
+        group = assigned_group[i]
+        if group == "B":
+            # 85% open rate for assigned group
+            received_treatment.append(np.random.binomial(1, 0.85))
+        else:
+            # 5% spillover for control group
+            received_treatment.append(np.random.binomial(1, 0.05))
+            
+    # 4. Purchase outcome
+    purchase = []
+    for i in range(n):
+        if received_treatment[i] == 1:
+            prob = 0.06 + 0.015 # Uplift
+        else:
+            prob = 0.06
+            
+        bought = np.random.binomial(1, prob)
+        
+        # Make some data missing
+        if participated[i] == 1:
+            missing_prob = 0.05
+        else:
+            missing_prob = 0.25
+            
+        is_missing = np.random.binomial(1, missing_prob)
+        
+        if is_missing == 1:
+            purchase.append(np.nan)
+        else:
+            purchase.append(bought)
+            
+    # Create DataFrame
+    df = pd.DataFrame({
+        "user_id": range(1, n + 1),
+        "assigned_group": assigned_group,
+        "participated": participated,
+        "received_treatment": received_treatment,
+        "purchase": purchase
+    })
+    
     return df
 
+def main():
+    # Make folder if not exists
+    if not os.path.exists(FIG_DIR):
+        os.makedirs(FIG_DIR)
 
-def main() -> None:
-    FIG_DIR.mkdir(parents=True, exist_ok=True)
-
-    if DATA_PATH.exists():
+    # Load or generate data
+    if os.path.exists(DATA_PATH):
         df = pd.read_csv(DATA_PATH)
-        print(f"Loaded CSV: {DATA_PATH}")
     else:
-        df = generate_synthetic_ab_data()
-        print("Generated synthetic data (CSV not found).")
-    print(f"Rows: {len(df):,}")
-    print(df.head(3))
+        df = generate_data()
+        
+    df_obs = df.dropna(subset=['purchase'])
 
-    # Participation rate by assignment (drop-off after assignment)
-    participation_rate = df.groupby("assigned_group")["participated"].mean().sort_index()
-    print("\nParticipation rate by assigned group:")
-    print(participation_rate)
-
-    # Missing outcome rate by assignment (attrition / missing purchase values)
-    missing_rate = df.groupby("assigned_group")["purchase"].apply(lambda s: s.isna().mean()).sort_index()
-    print("\nMissing purchase rate by assigned group:")
-    print(missing_rate)
-
-    # ITT: purchase rate by assigned group (observed outcomes only)
-    df_obs = df.dropna(subset=["purchase"])
-    itt_rate = df_obs.groupby("assigned_group")["purchase"].mean().sort_index()
-    print("\nITT purchase rate by assigned group (observed outcomes only):")
-    print(itt_rate)
-
-    # As-treated: purchase rate by whether treatment was actually received
-    as_treated_rate = df_obs.groupby("received_treatment")["purchase"].mean().sort_index()
-    print("\nAs-treated purchase rate (0=did not receive, 1=received):")
-    print(as_treated_rate)
-
-    # ==========================================
-    # Figures (Advanced plotting with error bars)
-    # ==========================================
+    # --- 1. Participation Check ---
+    grouped_part = df.groupby('assigned_group')['participated']
+    part_mean = grouped_part.mean()
+    part_count = grouped_part.count()
     
-    # 1. Participation Balance Check Figure
-    part_stats = df.groupby('assigned_group')['participated'].agg(['mean', 'count'])
-    part_stats['se'] = np.sqrt(part_stats['mean'] * (1 - part_stats['mean']) / part_stats['count'])
-    part_stats['ci95'] = 1.96 * part_stats['se']
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    bars = ax.bar(part_stats.index, part_stats['mean'], 
-                  yerr=part_stats['ci95'], capsize=5, color='#1f77b4', edgecolor='black', alpha=0.9)
-    ax.set_ylim(0, 1.0)
-    ax.set_ylabel("Participation Rate")
-    ax.set_title("Participation Balance Check")
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(['Control (A)', 'Reserved Stock Prompt (B)'])
-
-    for i, bar in enumerate(bars):
-        yval = bar.get_height()
-        n_val = part_stats['count'].iloc[i]
-        ax.text(bar.get_x() + bar.get_width()/2, yval + 0.02, 
-                f"{yval:.3f}\n(n={n_val})", ha='center', va='bottom', fontsize=10)
-
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "participation_rate_by_assignment.png", dpi=200)
+    # Calculate Standard Error and 95% CI manually
+    part_se = np.sqrt(part_mean * (1 - part_mean) / part_count)
+    part_ci = 1.96 * part_se
+    
+    plt.figure(figsize=(7, 5))
+    plt.bar(["Control (A)", "Reserved Stock (B)"], part_mean, yerr=part_ci, capsize=5, color="skyblue", edgecolor="black")
+    plt.title("Participation Balance Check")
+    plt.ylabel("Participation Rate")
+    plt.ylim(0, 1.0)
+    
+    for i in range(len(part_mean)):
+        plt.text(i, part_mean[i] + 0.02, f"{round(part_mean[i], 3)}\n(n={part_count[i]})", ha='center')
+        
+    plt.savefig(os.path.join(FIG_DIR, "participation_rate_by_assignment.png"))
     plt.close()
 
-    # 2. ITT (Intention-to-Treat) Figure
-    itt_stats = df_obs.groupby('assigned_group')['purchase'].agg(['mean', 'count'])
-    itt_stats['se'] = np.sqrt(itt_stats['mean'] * (1 - itt_stats['mean']) / itt_stats['count'])
-    itt_stats['ci95'] = 1.96 * itt_stats['se']
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    bars = ax.bar(itt_stats.index, itt_stats['mean'], 
-                  yerr=itt_stats['ci95'], capsize=5, color='#1f77b4', edgecolor='black', alpha=0.9)
-    ax.set_ylim(0, max(0.12, float(itt_stats['mean'].max()) * 1.5))
-    ax.set_ylabel("Observed Purchase Rate")
-    ax.set_title("ITT: Purchase rate by assigned group (observed outcomes)")
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(['Control (A)', 'Reserved Stock Prompt (B)'])
-
-    for i, bar in enumerate(bars):
-        yval = bar.get_height()
-        n_val = itt_stats['count'].iloc[i]
-        ax.text(bar.get_x() + bar.get_width()/2, yval + 0.005, 
-                f"{yval:.3f}\n(n={n_val})", ha='center', va='bottom', fontsize=10)
-
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "itt_purchase_rate_by_assignment.png", dpi=200)
+    # --- 2. ITT (Intention-to-Treat) ---
+    grouped_itt = df_obs.groupby('assigned_group')['purchase']
+    itt_mean = grouped_itt.mean()
+    itt_count = grouped_itt.count()
+    
+    itt_se = np.sqrt(itt_mean * (1 - itt_mean) / itt_count)
+    itt_ci = 1.96 * itt_se
+    
+    plt.figure(figsize=(7, 5))
+    plt.bar(["Control (A)", "Reserved Stock (B)"], itt_mean, yerr=itt_ci, capsize=5, color="skyblue", edgecolor="black")
+    plt.title("ITT: Purchase rate by assigned group")
+    plt.ylabel("Observed Purchase Rate")
+    plt.ylim(0, 0.12)
+    
+    for i in range(len(itt_mean)):
+        plt.text(i, itt_mean[i] + 0.005, f"{round(itt_mean[i], 3)}\n(n={itt_count[i]})", ha='center')
+        
+    plt.savefig(os.path.join(FIG_DIR, "itt_purchase_rate_by_assignment.png"))
     plt.close()
 
-    # 3. As-Treated Figure
-    as_treated_stats = df_obs.groupby('received_treatment')['purchase'].agg(['mean', 'count'])
-    as_treated_stats['se'] = np.sqrt(as_treated_stats['mean'] * (1 - as_treated_stats['mean']) / as_treated_stats['count'])
-    as_treated_stats['ci95'] = 1.96 * as_treated_stats['se']
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    bars = ax.bar(as_treated_stats.index, as_treated_stats['mean'], 
-                  yerr=as_treated_stats['ci95'], capsize=5, color='#1f77b4', edgecolor='black', alpha=0.9)
-    ax.set_ylim(0, max(0.12, float(as_treated_stats['mean'].max()) * 1.5))
-    ax.set_ylabel("Observed Purchase Rate")
-    ax.set_title("As-Treated: Purchase rate by treatment received")
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(['Not Treated\n(Did not open)', 'Treated\n(Opened Email)'])
-
-    for i, bar in enumerate(bars):
-        yval = bar.get_height()
-        n_val = as_treated_stats['count'].iloc[i]
-        ax.text(bar.get_x() + bar.get_width()/2, yval + 0.005, 
-                f"{yval:.3f}\n(n={n_val})", ha='center', va='bottom', fontsize=10)
-
-    plt.tight_layout()
-    plt.savefig(FIG_DIR / "purchase_rate_by_treatment_received.png", dpi=200)
+    # --- 3. As-Treated ---
+    grouped_at = df_obs.groupby('received_treatment')['purchase']
+    at_mean = grouped_at.mean()
+    at_count = grouped_at.count()
+    
+    at_se = np.sqrt(at_mean * (1 - at_mean) / at_count)
+    at_ci = 1.96 * at_se
+    
+    plt.figure(figsize=(7, 5))
+    plt.bar(["Not Treated", "Treated"], at_mean, yerr=at_ci, capsize=5, color="skyblue", edgecolor="black")
+    plt.title("As-Treated: Purchase rate by treatment received")
+    plt.ylabel("Observed Purchase Rate")
+    plt.ylim(0, 0.12)
+    
+    for i in range(len(at_mean)):
+        val = list(at_mean)[i]
+        n_val = list(at_count)[i]
+        plt.text(i, val + 0.005, f"{round(val, 3)}\n(n={n_val})", ha='center')
+        
+    plt.savefig(os.path.join(FIG_DIR, "purchase_rate_by_treatment_received.png"))
     plt.close()
-
-    print(f"\nSaved figures to: {FIG_DIR}")
-
+    
+    print("Done! Check the figures folder.")
 
 if __name__ == "__main__":
     main()
