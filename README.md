@@ -1,4 +1,4 @@
-# Applied Data & Inference Portfolio — Code Repository
+# Applied Data & Inference Portfolio - Code Repository
 
 This repository contains the Python code, data generation pipelines, and analytical Jupyter notebooks for my portfolio projects. 
 
